@@ -1,0 +1,416 @@
+---
+title: "FinBIF Last Week"
+output: blastula::blastula_email
+---
+
+```{r packages, include=FALSE}
+library(finbif)
+library(lubridate)
+library(magick)
+library(gt)
+library(scales)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r new-obs, include = FALSE}
+permissive <- list(
+  quality_issues = "both",
+  record_reliability = c("reliable", "unassessed", "unreliable"),
+  record_quality = c(
+    "expert_verified", "community_verified", "unassessed", "uncertain",
+    "erroneous"
+  )
+)
+
+last_week <- list(
+  first_import_date_min = today() - 7L,
+  first_import_date_max = today() - 1L
+)
+
+n <- fb_occurrence(
+  filter = c(last_week, permissive),
+  count_only = TRUE
+)
+
+sources <- finbif:::api_get(
+  "sources", list(pageSize = 1000), cache = TRUE
+)
+sources <- sources$content$results
+source_names <- tools::toTitleCase(
+  vapply(sources, getElement, character(1L), "name")
+)
+names(source_names) <-
+  paste0("http://tun.fi/", vapply(sources, getElement, character(1L), "id"))
+```
+
+# FinBIF Last Week
+_Your weekly summary of the latest additions to the Finnish Biodiversity
+Information Facility for the week `r format(today()-7, "%A, %B %e")` to
+`r format(today()-1, "%A, %B %e, %Y")`_
+<br>
+
+****
+
+Last week [__`r n`__](https://laji.fi/en/observation/list?&recordQuality=EXPERT_VERIFIED,COMMUNITY_VERIFIED,NEUTRAL,UNCERTAIN,ERRONEOUS&qualityIssues=BOTH&firstLoadedSameOrAfter=`r as.character(last_week$first_import_date_min)`&firstLoadedSameOrBefore=`r as.character(last_week$first_import_date_max)`) new observations were uploaded to FinBIF
+
+**** 
+<br>
+
+## New Observations
+```{r by-collection-table, echo = FALSE}
+person_responsible <- fb_collections(
+  select = person_responsible, supercollections = TRUE
+)
+
+n_collections <- fb_occurrence(
+  filter = c(last_week, permissive),
+  select = c("collection_id"),
+  aggregate = c("records", "species"), count_only = TRUE
+)
+
+by_collection <- fb_occurrence(
+  filter = c(last_week, permissive),
+  select = c("collection", "collection_id", "source_id"),
+  aggregate = c("records", "species"), n = n_collections
+)
+
+by_collection <- mutate(
+  by_collection,
+  collection = tools::toTitleCase(collection),
+  source_id = source_names[source_id],
+  collection_qname = gsub("http://tun.fi/", "", collection_id),
+  date1 = as.character(last_week$first_import_date_min),
+  date2 = as.character(last_week$first_import_date_max)
+)
+
+by_collection <- mutate(
+  by_collection, person_responsible = person_responsible[collection_qname, ]
+)
+
+by_collection <- arrange(by_collection, source_id, collection)
+
+by_collection_tab <- gt(by_collection, groupname_col = "source_id")
+
+by_collection_tab <- summary_rows(
+  by_collection_tab,
+  groups = TRUE,
+  columns = vars(n_records),
+  fns = list(`<span style="font-size:10px">Subtotal</span>` = ~sum(.)),
+  missing_text = "",
+  formatter = function(data, columns = NULL, rows = NULL) {
+    fmt(
+      data, columns = NULL, rows = NULL,
+      fns = function(x) paste0('<span style="font-size:10px">', x, '</span>')
+    )
+  }
+)
+
+by_collection_tab <- grand_summary_rows(
+  by_collection_tab,
+  columns = vars(n_records),
+  fns = list(`<span style="font-size:10px">Total</span>` = ~sum(.)),
+  missing_text = "",
+  formatter = function(data, columns = NULL, rows = NULL) {
+    fmt(
+      data, columns = NULL, rows = NULL,
+      fns = function(x) paste0('<span style="font-size:10px">', x, '</span>')
+    )
+  }
+)
+
+by_collection_tab <- 
+  tab_stubhead(by_collection_tab, label = html("<b>Source</b>"))
+
+by_collection_tab <- cols_merge(
+  by_collection_tab,
+  vars(n_records, collection_qname, date1, date2),
+  pattern = '<span style="font-size:10px"><a href="https://laji.fi/en/observation/list?collectionId={2}&recordQuality=EXPERT_VERIFIED,COMMUNITY_VERIFIED,NEUTRAL,UNCERTAIN,ERRONEOUS&qualityIssues=BOTH&firstLoadedSameOrAfter={3}&firstLoadedSameOrBefore={4}">{1}</a></span>'
+)
+
+by_collection_tab <- cols_merge(
+  by_collection_tab,
+  vars(n_species, collection_qname, date1, date2),
+  pattern = '<span style="font-size:10px"><a href="https://laji.fi/en/observation/species?collectionId={2}&recordQuality=EXPERT_VERIFIED,COMMUNITY_VERIFIED,NEUTRAL,UNCERTAIN,ERRONEOUS&qualityIssues=BOTH&firstLoadedSameOrAfter={3}&firstLoadedSameOrBefore={4}">{1}</a></span>'
+)
+
+by_collection_tab <- cols_merge(
+  by_collection_tab,
+  vars(collection, collection_id, person_responsible),
+  pattern =
+    '<span style="font-size:10px"><a href="{2}">{1}</a> (<em>{3}</em>)</span>'
+)
+
+by_collection_tab <- cols_label(
+  by_collection_tab,
+  collection = html("<b>Collection</b>"),
+  n_records  = html("<b>Records</b>"),
+  n_species  = html("<b>Species</b>")
+)
+
+by_collection_tab <- data_color(
+  by_collection_tab,
+  vars(n_records),
+  col_numeric(c("grey95", "grey50"), c(0L, by_collection$n_records))
+)
+
+data_color(
+  by_collection_tab,
+  vars(n_species),
+  col_numeric(c("grey95", "grey50"), c(0L, by_collection$n_species))
+)
+```
+
+```{r by-collection-plot, echo = FALSE, fig.align = "center", fig.width = 7, fig.height = 10}
+informal_groups <- trimws(
+  grep("^ ", finbif:::informal_group$tree, invert = TRUE, value = TRUE)
+)
+
+informal_groups <- tools::toTitleCase(informal_groups)
+
+informal_groups_n <- setNames(
+  seq_along(informal_groups), informal_groups
+)
+
+for (i in informal_groups) {
+  filter <- c(list(informal_group = i), last_week, permissive)
+  informal_groups_n[[i]] <- fb_occurrence(filter = filter, count_only = TRUE)
+}
+
+names(informal_groups_n) <- tools::toTitleCase(informal_groups)
+
+obs <- fb_occurrence(
+  filter = c(list(country = "Finland"), last_week, permissive),
+  select = c("lon_wgs84", "lat_wgs84", "date_time", "source_id", "collection"),
+  n = n, quiet = TRUE
+)
+
+obs$source <- source_names[obs$source_id]
+obs$collection = tools::toTitleCase(obs$collection)
+
+ggplot(
+  filter(obs, !is.na(date_time)),
+  aes(
+    x = reorder(collection, desc(collection)), y = date_time,
+    fill = source, color = source
+  )
+) +
+geom_boxplot(outlier.size = 1L, varwidth = TRUE) +
+scale_y_datetime(
+  expand = expansion(c(.1, 0)), position = "right", date_breaks = "10 years",
+  date_labels = "%Y"
+) +
+scale_x_discrete(labels = wrap_format(40L), position = "top") +
+scale_fill_brewer(palette = "Dark2") +
+scale_color_brewer(palette = "Dark2") +
+coord_flip() +
+facet_grid(
+  rows = vars(source), scales = "free_y", switch = "y", space = "free_y",
+  labeller = label_wrap_gen(20L)
+) +
+theme_minimal() +
+theme(
+  strip.text.y.left = element_text(angle = 0L, size = 10L),
+  strip.placement = "outside",
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  axis.text.y = element_text(size = 7L),
+  axis.text.x = element_text(angle = 45L, hjust = 0L, size = 11L),
+  legend.position = "none",
+  panel.grid.major.y = element_blank()
+)
+```
+
+```{r by-group, echo = FALSE, fig.align = "center", fig.width = 7}
+m <- rep(0L, 4L)
+
+par(mfrow = c(1L, 2L), oma = m)
+
+par(mar = c(5L, 11L, 1L, 1L))
+barplot(rev(informal_groups_n), las = 2L, border = NA, horiz = TRUE)
+
+par(mar = m)
+image(
+  hist_xy(
+    obs[c("lon_wgs84", "lat_wgs84")], breaks_xy(finland_map$bbox, size = .25)
+  ),
+  asp    = 2.4,
+  breaks = 2^seq(0L, 12L),
+  col    = hcl.colors(12L, rev = TRUE),
+  xlab   = NA,
+  ylab   = NA,
+  axes = FALSE,
+  bty = "n"
+)
+
+legend(
+  "bottomleft",
+  inset  = c(0, .01),
+  legend = expression(2^12, "", "", 2^6, "", "", 2^0),
+  fill   = hcl.colors(7L),
+  border = NA,
+  bty    = "n",
+  adj    = c(0, 0.25),
+  x.intersp = .2,
+  y.intersp = .5
+)
+
+polygon(finland_map$vertices, lwd = .2)
+```
+<br>
+
+**** 
+<br>
+
+## Latest Images <br>
+```{r images, include = FALSE}
+n_imgs <- 0L
+images <- list(url = NULL, cap = NULL, scap = NULL)
+
+while (n_imgs < 4L) {
+  records <- fb_occurrence(
+    filter = c(list(has_record_media = TRUE), last_week, permissive),
+    select = c(
+      "record_media_type", "record_media_url", "scientific_name", "record_id",
+      "scientific_name_italicised"
+    ),
+    n = 1, sample = TRUE, cache = FALSE
+  )
+  is_img <- records[["record_media_type"]][[1L]] == "IMAGE"
+  urls <- records[["record_media_url"]][[1L]][is_img]
+  if (identical(length(urls), 0L) || is.na(records[["scientific_name"]])) next
+  n_imgs <- n_imgs + 1L
+  images$url[[n_imgs]]  <- sample(urls, 1L)
+  images$cap[[n_imgs]] <- paste0("<i>", records[["scientific_name"]], "</i>")
+  i <- records[["scientific_name_italicised"]]
+  i <- if (is.na(i) || !i) "span" else "i"
+  images$cap[[n_imgs]] <- sprintf(
+    '<%1$s>%2$s</%1$s> (<a href="%3$s">%3$s</a>)',
+    i, records[["scientific_name"]], records[["record_id"]]
+  )
+}
+
+img_obj <- lapply(images$url, image_read)
+img_obj <- lapply(img_obj, image_resize, geometry_size_pixels(width = 500L))
+```
+
+```{r image-plotting, echo = FALSE, fig.align = "center", fig.cap = images$cap, fig.width = 3.5}
+img_obj[[1L]]
+img_obj[[2L]]
+img_obj[[3L]]
+img_obj[[4L]]
+```
+
+****
+<br>
+
+## Latest Rarities <br>
+```{r rarities, echo = FALSE}
+i <- 0L
+n <- 0L
+
+while(n < 10L && i < 50L) {
+  i <- i + 1L
+  n <- fb_occurrence(
+    filter = c(
+      last_week,
+      permissive,
+      list(n_total_records_finland_max = i, country = "Finland", finnish = TRUE)
+    ),
+    count_only = TRUE
+  )
+  Sys.sleep(1L)
+}
+
+rarities <- fb_occurrence(
+  filter = c(
+    last_week,
+    permissive,
+    list(n_total_records_finland_max = i, country = "Finland", finnish = TRUE)
+  ),
+  select = c(
+    "date_time", "abundance", "scientific_name", "municipality", "record_id",
+    "taxon_id", "scientific_name_italicised"
+  )
+)
+
+rarities <- mutate(
+  rarities,
+  scientific_name_italicised = ifelse(scientific_name_italicised, "em", "span"),
+  date_time = format(date_time, "%b %e, %Y")
+)
+
+rarities <- gt(rarities)
+
+rarities <- tab_header(
+  rarities,
+  title = paste(
+    "These taxa have less than", n + 1L, "observations recorded in FinBIF"
+  )
+)
+
+rarities <- cols_merge(
+  rarities,
+  vars(date_time, record_id), pattern = '<a href="{2}">{1}</a>'
+)
+
+rarities <- cols_merge(
+  rarities,
+  vars(scientific_name, taxon_id, scientific_name_italicised),
+  pattern = '<{3}><a href="{2}">{1}</a></{3}>'
+)
+
+cols_label(
+  rarities,
+  date_time = html("<b>Date</b>"),
+  scientific_name  = html("<b>Taxa</b>"),
+  abundance  = html("<b>Count</b>"),
+  municipality = html("<b>Municipality</b>")
+)
+```
+
+****
+<br>
+
+## Latest Publications <br>
+```{r publications, echo = FALSE, results = "asis"}
+format_authors <- function(x) {
+  authors <- lapply(
+    x$author,
+    function(x) paste(x$given, trimws(paste(x$`dropping-particle`, x$family)))
+  )
+  authors <- lapply(authors, paste, collapse = " ")
+  authors <- rev(authors)
+  for (i in seq_along(authors)) {
+    if (i == 2L) authors[[i]] <- paste0(authors[[i]], " & ")
+    if (i > 2L) authors[[i]] <- paste0(authors[[i]], ", ")
+  }
+  authors <- rev(authors)
+  do.call(paste0, authors)
+}
+bib <- jsonlite::read_json("https://luomus.github.io/finbif-bib/bib-data.json")
+date_added <- vapply(bib, getElement, character(1L), "dateAdded")
+bib <- head(sample(bib[as_date(date_added) >= as_date(last_week[[1L]])]))
+for(i in bib)
+cat(
+  '<article itemscope="" itemtype="https://schema.org/ScholarlyArticle"',
+  ' class="publication"><header><p itemprop="name"',
+  ' class="publication-title"><a href="',
+  i$url, '" target="_blank">', i$title,
+  '</a></p><p class="authors">', format_authors(i),
+  '</p><p><span itemprop="isPartOf" itemscope=""',
+  ' itemtype="https://schema.org/Periodical"><span itemprop="name"',
+  ' class="publication-journal"><i>',
+  i$containerTitle,
+  '</i></span></span><span>&nbsp;</span><span itemprop="isPartOf" itemscope=""',
+  ' itemtype="https://schema.org/PublicationVolume"><span',
+  ' itemprop="volumeNumber" class="publication-volume"><b>',
+  i$volume,
+  '</b></span></span><span>&nbsp;</span><span itemprop="pages"',
+  ' class="publication-pages">',
+  i$page, '</span><span>&nbsp;</span><time itemprop="datePublished">(',
+  i$month,' ', i$year,
+  ')</time></p></header></article>\n<hr>\n',
+  sep = ""
+)
+```
