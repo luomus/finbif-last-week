@@ -554,6 +554,6 @@ for(i in bib) {
 }
 ```
 
-[^1]: Here, "more than usual" is defined as a taxa that are in the top %5 most
-reported for their group and have the number of records is greater than the
-weekly average for each month last year.
+[^1]: Here, "more than usual" is defined as taxa that are in the top %5 most
+reported for their group and their number of records reported for the week is
+greater than the weekly average for every month last year.
