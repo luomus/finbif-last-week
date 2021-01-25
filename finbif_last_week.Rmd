@@ -379,7 +379,7 @@ data_color(
 )
 ```
 
-```{r by-collection-plot, fig.width = 7, fig.height = 10}
+```{r by-collection-plot, fig.width = 7, fig.height = 11}
 ggplot(
   filter(obs, !is.na(date_time)),
   aes(
@@ -398,7 +398,7 @@ scale_color_brewer(palette = "Dark2") +
 coord_flip() +
 facet_grid(
   rows = vars(source), scales = "free_y", switch = "y", space = "free_y",
-  labeller = label_wrap_gen(20L)
+  labeller = label_wrap_gen(25L)
 ) +
 theme_minimal() +
 theme(
