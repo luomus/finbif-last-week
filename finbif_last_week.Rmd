@@ -308,14 +308,14 @@ by_collection_tab <- gt(by_collection, groupname_col = "source_id")
 by_collection_tab <- summary_rows(
   by_collection_tab,
   groups = TRUE,
-  columns = vars(n_records),
+  columns = c(n_records),
   fns =  setNames(
     list(~sum(.)), paste0('<span style="', fontsize, '">Subtotal</span>')
   ),
   missing_text = "",
-  formatter = function(data, columns = NULL, rows = NULL) {
+  formatter = function(data, columns = everything(), rows = TRUE) {
     fmt(
-      data, columns = NULL, rows = NULL,
+      data, columns = everything(), rows = TRUE,
       fns = function(x) paste0('<span style="', fontsize, '">', x, '</span>')
     )
   }
@@ -323,14 +323,14 @@ by_collection_tab <- summary_rows(
 
 by_collection_tab <- grand_summary_rows(
   by_collection_tab,
-  columns = vars(n_records),
+  columns = c(n_records),
   fns = setNames(
     list(~sum(.)),  paste0('<span style="', fontsize, '">Total</span>')
   ),
   missing_text = "",
-  formatter = function(data, columns = NULL, rows = NULL) {
+  formatter = function(data, columns = everything(), rows = TRUE) {
     fmt(
-      data, columns = NULL, rows = NULL,
+      data, columns = everything(), rows = TRUE,
       fns = function(x) paste0('<span style="', fontsize, '">', x, '</span>')
     )
   }
@@ -341,21 +341,21 @@ by_collection_tab <-
 
 by_collection_tab <- cols_merge(
   by_collection_tab,
-  vars(n_records, fontsize, url_obs, collection_qname, params),
+  c(n_records, fontsize, url_obs, collection_qname, params),
   pattern =
     '<span style="{2}"><a href="{3}list?collectionId={4}&{5}">{1}</a></span>'
 )
 
 by_collection_tab <- cols_merge(
   by_collection_tab,
-  vars(n_species, fontsize, url_obs, collection_qname, params),
+  c(n_species, fontsize, url_obs, collection_qname, params),
   pattern =
     '<span style="{2}"><a href="{3}species?collectionId={4}&{5}">{1}</a></span>'
 )
 
 by_collection_tab <- cols_merge(
   by_collection_tab,
-  vars(collection, fontsize, collection_id, person_responsible),
+  c(collection, fontsize, collection_id, person_responsible),
   pattern = '<span style="{2}"><a href="{3}">{1}</a> (<em>{4}</em>)</span>'
 )
 
@@ -368,13 +368,13 @@ by_collection_tab <- cols_label(
 
 by_collection_tab <- data_color(
   by_collection_tab,
-  vars(n_records),
+  c(n_records),
   col_numeric(c("grey95", "grey50"), c(0L, by_collection$n_records))
 )
 
 data_color(
   by_collection_tab,
-  vars(n_species),
+  c(n_species),
   col_numeric(c("grey95", "grey50"), c(0L, by_collection$n_species))
 )
 ```
@@ -479,12 +479,12 @@ rarities_tab <- tab_header(
 
 rarities_tab <- cols_merge(
   rarities_tab,
-  vars(date_time, record_id), pattern = '<a href="{2}">{1}</a>'
+  c(date_time, record_id), pattern = '<a href="{2}">{1}</a>'
 )
 
 rarities_tab <- cols_merge(
   rarities_tab,
-  vars(
+  c(
     scientific_name, scientific_name_italicised, taxon_id, fontsize,
     informal_groups
   ),
