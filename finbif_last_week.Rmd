@@ -183,7 +183,7 @@ names(informal_groups_n) <- tools::toTitleCase(informal_groups)
 obs <- fb_occurrence(
   filter = c(last_week, permissive),
   select = c("lon_wgs84", "lat_wgs84", "date_time", "source_id", "collection"),
-  n = n, quiet = TRUE
+  n = pmin(n, 5e4), quiet = TRUE, sample = TRUE
 )
 
 obs$source <- source_names[obs$source_id]
